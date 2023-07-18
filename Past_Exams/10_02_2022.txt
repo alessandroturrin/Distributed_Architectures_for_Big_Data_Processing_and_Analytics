@@ -1,0 +1,124 @@
+1) a
+2) b
+
+EXERCISE 1
+
+class MapperBigData1 extends Mapper<
+                    LongWritable, 
+                    Text,         
+                    Text,         
+                    FloatWritable> {
+    
+    protected void map(
+            LongWritable key,   
+            Text value,         
+            Context context) throws IOException, InterruptedException {
+
+		String elems[] = value.toString.split(",");
+		
+		String category = elems[3];
+
+		if(category.equals("Education")
+			context.write(new Text(elems[4]), new FloatWritable(Float.parseFloat(elems[2])));			
+	}
+}
+
+class ReducerBigData1 extends Reducer<
+                Text,           
+                FloatWritable,    
+                Text,           
+                IntWritable> {  
+    
+    @Override
+    protected void reduce(
+        Text key, 
+        Iterable<FloatWritable> values, 
+        Context context) throws IOException, InterruptedException {
+		
+		int counter = 0;
+		boolean onlyFree = true;
+
+		for(FloatWritable value: values){
+			if(value.get()!=0.0){
+				onlyFree = false;
+				break;
+			}
+			counter++;
+		}
+
+		if(onlyFree)
+			context.write(new Text(key), new IntWritable(count));
+	}
+}
+
+1.2) c
+1.3) a
+
+
+EXERCISE 2
+
+inputPath1 = 'Apps.txt'
+inputPath2 = 'Users.txt'
+inputPath3 = 'Actions.txt'
+outputFolder1 = 'outPart1'
+outputFolder2 = 'outPart2'
+
+sc = SparkContext.getOrCreate()
+
+appsRDD = sc.textFile(inputPath1)
+usersRDD = sc.textFile(inputPath2)
+actionsRDD = sc.textFile(inputPath3)
+
+E2.1
+def actionsFilter(line):
+	elems = line.split(',')
+	year = elems[2].split('/')[0]
+	action = elems[3]
+
+	return year=='2022' and action=='Install'
+
+def appsMapper(line):
+	elems = line.split(',')
+	price = int(elems[2])
+	
+	if(price==0):
+		return (elems[0],(0,1))
+	else:
+		return (elems[0],(1,0))
+
+#get actions pairs (UserId,AppId)
+mappedActionsRDD = actionsRDD.filter(lambda l: actionsFilter(l)).map(lambda l: (l.split(',')[1],l.split(',')[0])).distinct()
+
+#get apps pairs (AppId,Type)
+appsRDD.map(lambda l: appsMapper(l))
+
+#jointRDD (appId,(userId,(type)))
+jointAppsUser = mappedActionsRDD.join(appsRDD)
+finalRDD = jointAppsUser.map(lambda l: (l[1][0],l[1][1])).reduceByKey(lambda v1, v2: v1[0]+v2[0], v1[1]+v2[1])\
+	.filter(lambda v: v[1][1]>v[1][0].map(lambda v: (v[0],v[1][1]))
+finalRDD.saveAsTextFile(outputFolder1)
+
+
+E2.2
+def mapActions(line):
+	elems = line.split(')
+	action = elems[3]
+	user = elems[0]
+	appId = elems[1]
+
+	if(action=='Install'):
+		return ((user,appId),1)
+	else:
+		return ((user,appId),-1)
+
+#get (UserId, nInstalledApps)
+installedAppsRDD = appsRDD.map(lambda l: mapActions(l)).reduceByKey(lambda v1, v2: v1+v2).filter(lambda l: l[1]>0)\
+	.map(lambda l: (l[0][0],1)).reduceByKey(lambda v1, v2: v1+v2).cache()
+
+maxApps = installedAppsRDD.reduce(lambda v1, v2: max(v1, v2))
+
+italiansRDD = usersRDD.filter(lambda l: l[1]=='Italian').map(lambda l: (l.split(',')[0], None))
+
+finalRDD = italiansRDD.join(installedAppsRDD).map(lambda l: (l[0],l[1][1])).filter(lambda l: l[1]==maxApps).keys()
+
+finalRDD.saveAsTextFile(outputFolder1)

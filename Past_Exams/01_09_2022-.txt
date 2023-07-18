@@ -1,0 +1,97 @@
+EXERCISE 1
+1) b
+2) d
+
+class MapperBigData1 extends Mapper<
+                    LongWritable, 
+                    Text,         
+                    Text,         
+                    Text> {
+    
+    protected void map(
+            LongWritable key,   
+            Text value,         
+            Context context) throws IOException, InterruptedException {
+
+		String elems[] = value.toString.split(",");
+		
+		int size = Integer.parseInt(elems[2]);
+		String region = elems[5];	
+		String id = elems[1];
+
+		if(size>10000)
+			if(region.equals("Europe") || region.equals("North America"))
+				context.write(new Text(id), new Text(region));
+	}
+}
+
+class ReducerBigData1 extends Reducer<
+                Text,           
+                Text,    
+                Text,           
+                NullWritable> {  
+    
+    @Override
+    protected void reduce(
+        Text key, 
+        Iterable<Text> values, 
+        Context context) throws IOException, InterruptedException {
+		
+		int euCounter = 0, naCounter=0;
+
+		for(Text value: values){
+			if(value.toString.equals("Europe")
+				euCounter++;
+			else
+				naCounter++;
+		}
+
+		if(euCounter>=10 && naCounter>=10)
+			context.write(new Text(key), NullWritable.get());
+	}
+}
+
+1.2) c
+1.3) d
+
+
+EXERCISE 2
+
+companiesRDD = sc.textFile(compsPath)
+dataCentersRDD = sc.textFile(dataCenterPath)
+gpusRDD = sc.textFile(gpusPath)
+
+E2.1
+filteredCompaniesRDD = companiesRDD.filter(lambda l: int(l.split(',')[2])>=200).map(lambda l: (l.split(',')[0],l.split(',')[1]))
+
+manyCitiesRDD = dataCentersRDD.filter(lambda l: l.split(',')[5]=='Europe')\
+	.map(lambda l: (l.split(',')[1],l.split(',')[3])).distinct().map(lambda l: (l[0],1))\
+	.reduceByKey(lambda v1,v2: v1+v2).filter(lambda l: l[1]>=10)
+
+dcRDD = dataCentersRDD.map(lambda l: (l.split(',')[1],int(l.split(',')[2])))
+#get(cId,surface)
+jointDCRDD = manyCitiesRDD.join(dcRDD).map(lambda v: (v[0],v[1][1]))
+
+#(cId,(cName,surface)) -> ((cId,cName),(surface,surface))
+finalRDD = filteredCompaniesRDD.join(dcRDD).map(lambda v: ((v[0],v[1][0]),(v[1][1],v[1][1])))\
+	.reduceByKey(lambda v1, v2: min(v1[0],v2[0]), max(v1[1],v2[1]))
+finalRDD.saveAsTextFile(outputPart1)
+
+
+E2.2
+def gpusReducer(v1, v2):
+	if(v1==v2):
+		return 1
+	else:
+		return 0
+	
+#(dcId,tot)
+nvidiaRDD = gpusRDD.filter(lambda l: l.split(',')[1]=='NVIDIA RTX A5000')\
+	.map(lambda l: (l.split(',')[2],1).reduceByKey(lambda v1, v2: v1+v2)
+#(dcId,cId)
+mappedDCRDD = dataCentersRDD.map(lambda l: (l.split(',')[0],l.split(',')[1]))
+#(dcId,(tot,cId)) -> get the companies that don't satisfy the requirements
+jointGpusRDD = nvidiaRDD.join(mappedDCRDD).map(lambda v: ((v[0],v[1][1]),v[1][0]).reduceByKey(gpusReducer)\
+	.filter(lambda l: l[1]==0).map(lambda v: (v[0][1],None))
+finalRDD = companiesRDD.map(lambda l: (l.split(',')[0],None)).leftOuterJoin(jointGpusRDD)
+finalRDD.keys().saveAsTextFile(outputPPart2)

@@ -1,0 +1,112 @@
+1) c
+2) a
+
+EXERCISE 1
+
+class MapperBigData1 extends Mapper<
+                    LongWritable, 
+                    Text,         
+                    Text,         
+                    IntWritable> {
+    
+    protected void map(
+            LongWritable key,   
+            Text value,         
+            Context context) throws IOException, InterruptedException {
+
+		String elems[] = value.toString.split(",");
+		
+		if(elems[0].startswith("2020")
+			if(elems[3].equals("true")
+				context.write(new Text(elems[2]), new IntWritable(1)); //ItemId, 1
+			else
+  				context.write(new Text(elems[2]), new IntWritable(0)); //ItemId, 0
+	}
+}
+
+class ReducerBigData1 extends Reducer<
+                Text,           
+                IntWritable,    
+                Text,           
+                FloatWritable> {  
+    
+    @Override
+    protected void reduce(
+        Text key, 
+        Iterable<IntWritable> values, 
+        Context context) throws IOException, InterruptedException {
+		
+		total = 0;
+		counter=0;
+
+		for(IntWritable value: values){
+			counter = counter + value.get(); //1 if sold. 0 otherwise
+			total = total + 1;
+		}
+		
+		float conversionRate = (float)counter/(float)total;
+
+		if(conversionRate > 0.001)
+			context.write(new Text(key), new FloatWritable(conversionRate));	
+	}
+}
+
+1.1) c
+1.2) a
+
+
+EXERCISE 2
+
+inputPath1 = 'items.txt'
+inputPath2 = 'Customers.txt'
+inputPath3 = 'ads_sales.txt'
+outputFolder1 = 'outPart1/'
+outputFolder2 = 'outPart2/'
+
+sc = SparkContext.getOrCreate()
+
+itemsRDD = sc.textFile(inputPath1)
+purchasesRDD = sc.textFile(inputPath3)
+
+#E2.1
+mappedItemsRDD = itemsRDD.map(lambda l: (l.split(',')[0], float(l.split(',')[2]))).cache()
+mappedItemsAndCatRDD = itemsRDD.map(lambda l: (l.split(',')[0], l.split(',')[3])).cache()
+mappedPurchasesRDD = purchasesRDD.filter(lambda l: l.split(',')[3]=='true')\
+  .map(lambda l: (l.split(',')[2], float(l.split(',')[4]))).cache()
+ 
+jointPricesRDD = mappedPurchasesRDD.join(mappedItemsRDD).cache()
+
+def mapPrices(v):
+	salePrice = v[0]
+	recommendedPrice = v[1]
+
+	if(salePrice>recommendedPrice):
+		return (1,1)
+	else:
+		return (0,1)
+
+mappedPricesRDD = jointPricesRDD.map(lambda i: (i[0],mapPrices(i[1])))
+filteredPricesRDD = mappedPricesRDD.reduceByKey(lambda v1, v2: (v1[0]+v2[0], v1[1]+v2[1]))\
+	.map(lambda v: (v[0],v[1][0]/v[1][1])).filter(lambda v: v[1]>0.9)
+ 
+finalRDD = filteredPricesRDD.join(mappedItemsAndCatRDD).cache().map(lambda v: (v[0], v[1][1]))
+
+finalRDD.saveAsTextFile(outputPath1)
+
+E2.2
+#mappedItemsRDD was defined in previous exercise and contains (ItemId, SalePrice)
+purchasesMappedRDD = purchasesRDD.map(lambda l: (l.split(',')[2], float(l.split(',')[4])))
+
+#get the items that have never been advertised by subtracting the advertised items from all items
+#the RDD is stil mapped as (ItemId, Category)
+unadvertisedItemsRDD = mappedItemsAndCatRDD.subtractByKey(purchasesMappedRDD).map(lambda v: (v[1],1))\
+	.reduceByKey(lambda v1, v2: v1+v2)
+
+lowProfitRDD = purchasesMappedRDD.reduceByKey(lambda v1, v2: v1+v2)\
+	.filter(lambda p: p[1]>0 and p[1]<100)
+lowProfCatRDD = lowProfitRDD.join(mappedItemsAndCatRDD).map(lambda v: (v[1][1],1))\
+	.reduceByKey(lambda v1, v2: v1+v2)
+
+jointFinalRDD = unadvertisedItemsRDD.join(lowProfCatRDD).filter(lambda v: v[1][0]>=10 and v[1][1]>=10).keys()
+jointFinalRDD.saveAsTextFile(outputPath2)
+

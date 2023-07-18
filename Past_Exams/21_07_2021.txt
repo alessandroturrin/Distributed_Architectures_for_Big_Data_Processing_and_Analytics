@@ -1,0 +1,135 @@
+1) b
+2) a
+
+EXERCISE 1
+class MapperBigData1 extends Mapper<
+                    LongWritable, 
+                    Text,         
+                    Text,         
+                    Text> {
+    
+    protected void map(
+            LongWritable key,   
+            Text value,         
+            Context context) throws IOException, InterruptedException {
+
+		String elems[] = value.toString.split(",");
+		
+		String year = elems[3].split("\\/")[0];
+
+		if(year.equals("2019") || year.equals("2020"))
+			context.write(new Text(elems[0]), new Text(year));
+		
+	}
+}
+
+class ReducerBigData1 extends Reducer<
+                Text,           
+                IntWritable,    
+                Text,           
+                NullWritable> {  
+    
+    @Override
+    protected void reduce(
+        Text key, 
+        Iterable<Text> values, 
+        Context context) throws IOException, InterruptedException {
+		
+		HashMap<String,Integer> counter = new HashMap<>();
+		
+		#init counter
+		counter.put("2019",new Integer(0));
+		counter.put("2020",new Integer(0));
+
+		#since we consider just two 
+		for(Text value: values)
+			counter.update(value.toString(),
+				counter.get(Integer.parseInt(value.toString())+1));
+		int diff = Integer.parseInt(counter.get("2020"))-								Integer.parseInt(counter.get("2019"));
+		if(counter.get("2019")<counter.get("2020"))
+			context.write(new Text(key), new Text(diff));
+	}
+}
+
+1.1) c
+1.2) a
+
+
+
+EXERCISE 2
+inputPath1 = 'CarModels.txt'
+inputPath2 = 'SalesEU.txt'
+inputPath3 = 'SalesExtraEU.txt'
+outputFolder1 = 'outPart1/'
+outputFolder2 = 'outPart2/'
+
+#E2.1
+salesTh = 960
+avgTh = 50000.0
+
+carsSoldItalyRDD = sc.textFile(inputPath2).filter(lambda s: s.split(',')[4]=='Italy')
+#get (modelId,price) map
+mappedSalesItalyRDD = carsSoldItalyRDD.map(lambda s: (s.split(',')[2],float(s.split(',')[5])))
+AllCarsRDD = sc.textFile(inputPath1).map(lambda s: (s.split(',')[0],s.split(',')[2]))
+
+jointMappedSalesRDD = mappedSalesItalyRDD.join(AllCarsRDD)
+filteredByModelRDD = jointMappedSalesRDD.filter(lambda v: v[1][1]=='FIAT')\
+	.map(lambda v: (v[0],v[1][0]))
+combineFilteredRDD = filteredByModelRDD.combineByKey(
+		lambda inputElem:(inputElem,1),\
+		lambda intermediateElem, inputElem:\
+			(intermediateElem[0]+inputElem,intermediateElem[1]+1),\
+		lambda intermediateElem1, intermediateElem2:\
+			(intermediateElem1[0]+intermediateElem2[0],\
+			intermediateElem1[1]+intermediateElem2[1])
+	)
+mappedFinalRDD = combineFilteredRDD.map(lambda v: (v[0],(v[1][0]/v[1][1],v[1][1])))
+finalRDD = mappedFinalRDD.filter(lambda v: v[1][0]>avgTh and v[1][1]>salesTh)
+finalRDD.saveAsTextFilt(outputFolder1)
+
+E2.2
+
+def mapUnionRDD(line):
+	vals = line.split(',')
+	model = vals[2]
+	year = vals[3].split('/')[0]
+
+	return ((model,year),1)
+
+
+carsSoldEURDD = sc.textFile(inputPath2)
+carsSoldExtraRDD = sc.textFile(inputPath3)
+unionRDD = carsSoldEURDD.union(carsSoldExtraRDD)
+#((model,year),count)
+reducedUnionRDD = unionRDD.map(lambda s: mapUnionRDD(s))\
+	.reduceByKey(lambda v1, v2: v1+v2)
+#change mapping to (model,(year,count)) and group by key
+groupedRDD = reducedUnionRDD.map(lambda v: (v[0][0],(v[0][1],v[1]))).groupByKey()
+
+yearsList = unionRDD.map(lambda s: s.split(',')[3].split('/'[0])).collect()
+
+#(2017, 30), (2018, 31) etc.
+def filterWindows(items):
+  salesList = list(items[1])
+  salesList.sort()
+
+  lastYear = -1
+  lastSales = -1
+
+  for year, sales in salesList:
+    tmp_year = int(year)
+    assert lastYear==-1 or tmp_year==(lastYear+1)
+    if sales<=lastSales:
+      return False
+    lastSales = sales
+    lastYear = tmp_year
+  return True
+
+
+filteredFinalRDD = groupedRDD.filter(filterWindows)
+#filteredFinalRDD.keys().saveAsTextFile(output2)
+
+for z in filteredFinalRDD.collect():
+  print(z[0], list(z[1]))
+	
+

@@ -1,0 +1,116 @@
+
+EXERCISE 1
+
+class MapperBigData1 extends Mapper<
+                    LongWritable, 
+                    Text,         
+                    Text,         
+                    Text> {
+    
+    protected void map(
+            LongWritable key,   
+            Text value,         
+            Context context) throws IOException, InterruptedException {
+
+		String elems[] = value.toString.split(",");
+		
+		String year = elems[0].split("\\/")[0];
+		
+		if(year.equals("2015")
+			context.write(new Text(elems[2]), new Text(elems[3])); //carId, failureType  
+	}
+}
+
+class ReducerBigData1 extends Reducer<
+                Text,           
+                IntWritable,    
+                Text,           
+                IntWritable> {  
+    
+    @Override
+    protected void reduce(
+        Text key, 
+        Iterable<Text> values, 
+        Context context) throws IOException, InterruptedException {
+		
+		//hashset to store different failures
+		HashSet<String> failures = new HashSet<String>();
+		int totalFailuresCounter = 0;
+
+		for(Text value: values){
+			totalFailuresCounter++;
+			failures.add(value.toString());		//set considers just single instances, no dup	
+		}
+
+		if(failures.length>=2 && totalFailuresCounter>=5)
+			context.write(new Text(key), new IntWritable(totalFailuresCounter));	
+	}
+}
+
+1) c
+2) 0
+
+
+
+EXERCISE 2
+E2.1    
+inputPathCars = "Cars.txt"
+inputPathFailures = "CarsFailures.txt"
+outputPathPart1 = "outPart1"
+outputPathPart2 = "outPart2"
+failuresRDD = sc.textFile(inputPathFailures).cache()
+
+def years1718EngineFilter(line):
+    fields = line.split(",")
+    
+    date = fields[0]
+    failureType = fields[3]
+    
+    if ( (date.startswith("2018") or date.startswith("2017")) and failureType=="Engine"):
+        return True
+    else:
+        return False
+    
+selectedFailuresRDD = failuresRDD.filter(years1718EngineFilter)  
+
+def pairCarIDCounters(line):
+    fields = line.split(",")
+    date = fields[0]
+    carId= fields[2]
+    
+    if (date.startswith("2017")):
+        return (carId, -1)
+    else:
+        return (carId, +1)
+    
+carsCountersRDD = selectedFailuresRDD.map(pairCarIDCounters)
+
+carsTotFailures1718RDD = carsCountersRDD.reduceByKey(lambda v1,v2: v1+v2)
+selectedCarsRDD = carsTotFailures1718RDD.filter(lambda pair: pair[1]>0)
+carsRDD = sc.textFile(inputPathCars)
+carModelRDD = carsRDD.map(lambda line: (line.split(",")[0], line.split(",")[1]))
+joinSelectedRDD = selectedCarsRDD.join(carModelRDD)
+selectedCarsModels = joinSelectedRDD.mapValues(lambda value: value[1])
+
+for x in selectedCarsModels.collect():
+  print(x)
+
+E2.2
+
+Def getListOfDates(x):
+	dates = x[1]
+	
+	sequences = []
+
+	for date in dates:
+		yesterday = previousDate(date)
+		#check if yesterday is in dates
+		if yesterday in dates:
+			sequences.append((x[0],yesterday))
+	
+	return sequences
+
+#map failuresRDD as (carId,list(dates))
+DatesByCarIdRDD = failuresRDD.map(lambda l: (l.split(',')[2],l.split(',')[0])).distinct().groupByKey()
+#map failuresRDD as (carId,list(first_date_of_sequences))
+SequencesRDD = DatesByCarIdRDD.map(lambda x: getListOfDates(x)).values()

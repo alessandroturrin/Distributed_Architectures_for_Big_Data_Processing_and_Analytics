@@ -1,0 +1,131 @@
+1)b
+
+2)b
+
+EXERCISE 1
+
+class MapperBigData1 extends Mapper<
+                    LongWritable, 
+                    Text,         
+                    Text,         
+                    IntWritable> {
+    
+    protected void map(
+            LongWritable key,   
+            Text value,         
+            Context context) throws IOException, InterruptedException {
+
+		String elems[] = value.toString.split(",");
+		
+		if(elems[2].equals("BrokenMotherBoard"))
+			context.write(new Text(elems[1]), new IntWritable(1));
+			
+	}
+}
+
+class ReducerBigData1 extends Reducer<
+                Text,           
+                IntWritable,    
+                NullWritable,           
+                Text> {  
+    
+    @Override
+    protected void reduce(
+        Text key, 
+        Iterable<IntWritable> values, 
+        Context context) throws IOException, InterruptedException {
+		int counter = 0;
+
+		for(IntWritable value: values)
+			counter = counter + value.get();
+
+		context.write(NullWritable.get(), new Text(key.toString() + "_" + counter));
+	}
+}
+
+class MapperBigData2 extends Mapper<
+                    NullWritable, 
+                    Text,         
+                    Text,         
+                    IntWritable> {
+    
+    protected void map(
+            NullWritable key,   
+            Text value,         
+            Context context) throws IOException, InterruptedException {
+
+		context.write(NullWritable.get(), new Text(value));
+	}
+}
+
+class ReducerBigData2 extends Reducer<
+                NullWritable,           
+                Text,    
+                Text,           
+                NullWritable> {  
+    
+    @Override
+    protected void reduce(
+        NullWritabke key, 
+        Iterable<Text> values, 
+        Context context) throws IOException, InterruptedException {
+		
+		String date = null;
+		int counter = -1;
+
+		for(Text value: values){
+			String current_date = value.toString().split("_")[0];
+			int current_counter =  value.toString().split("_")[0];
+
+			if(current_counter>counter || 
+				(current_counter==counter && current_date.compareTo(date)>0)){
+				date = current_date;
+				counter = current_counter;
+			}
+		}
+
+		context.write(new Text(date + "\t" + counter), nullWritable.get());
+	}
+}
+
+a) c
+b) c
+
+
+EXERCISE 2
+inputPath1 = 'ProdPlants.txt'
+inputPath2 = 'Robots.txt'
+inputPath3 = 'OutOfOrders.txt'
+outputFolder1 = 'OutPart1/'
+outputFolder2 = 'OutPart2/'
+
+sc = SparkContext.getOrCreate()
+
+plantsRDD = sc.textFile(inputPath1)
+robotsRDD = sc.textFile(inputPath2)
+outsRDD = sc.textFile(inputPath3)
+
+E2.1
+def mapDates(v):
+	if(v.startswith('2021'):
+		return (v[0],(1,0))
+	else:
+		return (v[0],(0,1))
+
+filteredOutsRDD = outsRDD.filter(lambda l: line.split(',')[1]>='2020/01/01' and line.split(',')[1]<='2021/12/31')\
+	.map(lambda l: (l.split(',')[0],l.split(',')[1])).distinct()
+selectedOutsRDD = filteredOutsRDD.map(lambda v: mapDates(v)).reduceByKey(lambda v1, v2: v1[0]+v2[0], v1[1]+v2[1])\
+	filter(lambda v: v[1][0]>v[1][1]).map(lambda v: (v[0],None))
+mappedRobotsRDD = robotsRDD.map(lambda l: (l.split(',')[1],l.split(',')[0]))
+mappedPlantsRDD = plantsRDD.map(lambda l: (l.split(',')[0],l.split(',')[1]))
+jointCity = mappedRobotsRDD.join(mappedPlantsRDD).map(lambda v: (v[1][0],v[1][1]))
+finalRDD = selectedOutsRDD.join(jointCity)
+finalRDD.saveAsTextFile(outputFolder1)
+
+E2.2
+
+dates = outsRDD.map(lambda l: (l.split(',')[0],None)).distinct().keys()
+mappedRobotsRDD = robotsRDD.map(lambda l: (l.split(',')[0],l.split(',')[1]))
+mappedOutsRDD = outsRDD.map(lambda l: (l.split(',')[0], l.split(',')[1]))
+# (rId,(pId,date)) -> ((pId,date),rId)
+jointRDD = mappedOutsRDD.join(mappedRobotsRDD).map(lambda v: ((v[1][0],v[1][1]),v[0])).reduceByKey(lambda v1, v2: v1+v2)

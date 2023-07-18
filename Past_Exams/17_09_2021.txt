@@ -1,0 +1,131 @@
+1) b
+2) a
+
+EXERCISE 1
+
+class MapperBigData1 extends Mapper<
+                    LongWritable, 
+                    Text,         
+                    Text,         
+                    IntWritable> {
+    
+    protected void map(
+            LongWritable key,   
+            Text value,         
+            Context context) throws IOException, InterruptedException {
+
+		String elems[] = value.toString.split(",");
+		
+		if(elems[0].startswith("2010"))
+			context.write(new Text(elems[1]), new IntWritable(1)));
+		else
+			context.write(new Text(elems[1], new IntWritable(0)));	
+	}
+}
+
+class ReducerBigData1 extends Reducer<
+                Text,           
+                IntWritable,    
+                Text,           
+                FloatWritable
+
+	int topPurchases;
+	String topUser;
+
+    @Override
+    protected void setup(Context context){
+		topPurchases = -1;
+		topUser = "";		
+	}
+    
+    @Override
+    protected void reduce(
+        Text key, 
+        Iterable<IntWritable> values, 
+        Context context) throws IOException, InterruptedException {
+		
+		int counter2010 = 0;
+		int counterOthers = 0;
+
+		for(IntWritable value: values)
+			if(value.get()==1)
+				counter2010++;
+			else
+				counterOthers++;
+		
+		if(counterOthers==0 && counter2010>=topPurchases)
+			if(counter2010>topCounter || key.toString().equals(topUser)<0){
+				topPurchases = counter2010;
+				topUser = key.toString();
+			}
+		
+	}
+
+     @Override
+     protected void cleanup(Context context){
+		context.write(new Text(topUser), new IntWritable(topPurchases));
+	}
+}
+
+1.1) b
+1.2) a
+
+ECERCISE 2
+
+inputPath1 = 'ItemsCatalog.txt'
+inputPath2 = 'Customers.txt'
+inputPath3 = 'Purchases.txt'
+outputFolder1 = 'outPart1/'
+outputFolder2 = 'outPart2/'
+
+sc = SparkContext.getOrCreate()
+
+purchasesRDD = sc.textFile(inputPath3)
+
+E2.1
+def mapPurchases(line):
+	vals = line.split(',')
+	year = vals[0].split('/')[0]
+	id = vals[2]
+	
+	return (id, year), 1)
+
+mappedPurchasesRDD = purchasesRDD.map(lambda l: mapPurchases(l)).filter(lambda v: v[0][1]>='2010' and v[0][1]<='2019')\
+	.reduceByKey(lambda v1, v2: v1+v2)
+
+def mapPurchasesYears(val):
+	if val[1]>=1000:
+		return(val[0][0],1)
+	else:
+		return (val[0][0],0)
+
+#(itemId,nFrequentYears)
+frequentItemsRDD = mappedPurchasesRDD.map(mapPurchasesYear).reduceByKey(lambda v1, v2: v1+v2).filter(lambda v: v[1]==10)
+frequentItemsRDD.keys().saveAsTextFile(outputFolder1)
+
+E2.2
+
+itemsRDD = sc.textFile(inputPath1)
+
+filteredItemsRDD = itemsRDD.filter(lambda l: l.split(',')[0].split('-')[0]<='2010/01/01')\
+	.map(lambda l: (l.split(',')[0], l.split(',')[3]))
+
+soldItemsRDD = purchasesRDD.map(lambda l: (l.split(',')[2],l.split(',')[0]))
+
+def filterItems(item):
+	pairs = list(item[1])
+	
+	for val in pairs:
+		if computeDifference(val[1], val[0])>=2.0:
+			return True
+		else:
+			return False
+
+# (id)
+jointItemsRDD = filteredItemsRDD.join(soldItemsRDD).groupByKey().filter(filterItems).map(lambda v: v[0])
+allItemsCategoryRDD = itemsRDD.map(lambda l: (l.split(',')[0], l.split(',')[2]))
+
+categoriesRDD = jointItemsRDD.join(allItemsCategoryRDD).map(lambda v: (v[1],1)).reduceByKey(lambda v1, v2: v1+v2)\
+	.filter(lambda v: v[1]>=50)
+
+categoriesRDD.saveAsTextFile(outputPart2)

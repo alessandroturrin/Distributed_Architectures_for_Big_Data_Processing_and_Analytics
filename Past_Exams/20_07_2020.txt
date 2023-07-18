@@ -1,0 +1,105 @@
+1) d
+2) a
+
+
+EXERCISE 1
+
+class MapperBigData1 extends Mapper<
+                    LongWritable, 
+                    Text,         
+                    Text,         
+                    Text> {
+    
+    protected void map(
+            LongWritable key,   
+            Text value,         
+            Context context) throws IOException, InterruptedException {
+
+		String elems[] = value.toString.split(",");
+		
+		context.write(new Text(elems[2]), new Text(elems[0])); //Brand, ModelId  
+	}
+}
+
+class ReducerBigData1 extends Reducer<
+                Text,           
+                IntWritable,    
+                Text,           
+                NullWritable> {  
+    
+    @Override
+    protected void reduce(
+        Text key, 
+        Iterable<Text> values, 
+        Context context) throws IOException, InterruptedException {
+		
+		//hashset to store different models
+		String model="";
+		counter=0;
+
+		for(Text value: values){
+			if(counter==0){ //first iteration
+				model = value.toString();
+				counter++;
+			}
+			if(!value.toString().equals(model)){
+				counter++;
+				break;
+			}	
+		}
+
+		if(counter==1)
+			context.write(new Text(key.toString+"\t"+model), NullWritable.get());	
+	}
+}
+
+1.1) c
+1.2) 0
+
+EXERCISE 2
+
+inputPath1 = 'SmartphoneModels.txt'
+inputPath2 = 'Purchases.txt'
+outputFolder1 = 'outPart1/'
+outputFolder2 = 'outPart2/'
+
+2.1
+purchasesRDD = sc.textFile(inputPath2)
+purchases2019RDD = purchasesRDD.filter(lambda l: l.split(,)[2].startswith('2019'))
+mappedModelsRDD = purchases2019RDD.map(lambda l: (l.split(',')[0],l.split(',')[3]))
+modelIncomeRDD = mappedModelsRDD.reduceByKey(lambda v1, v2: v1+v2)
+maxValue = modelIncomeRDD.values().reduce(lambda v1, v2: max(v1, v2))
+bestModelIncomeRDD = modelIncomeRDD.filter(lambda v: v[1]==maxValue).keys()
+bestModelIncomeRDD.saveAsTextFile(outputFolder1)
+
+2.2
+
+def filterYears(line):
+	date = line.split(,)[2]
+	if('2010/01/01'<date and '2019/12/31'>date):
+		return True
+	return False
+
+def pairMidYear(line):
+	year = line.split(,)[2].split('/')[0]
+	mid = line.split(,)[0]
+
+	return ((mid,year),1)
+	
+	
+purchasesTenYearsRDD = purchasesRDD.filter(lambda l: filterYears(l))
+mappedModelsDateRDD = purchasesTenYearsRDD.map(lambda l: pairMidYear(l))
+purchasesPerModelYearDD = mappedModelsDateRDD.reduceByKey(lambda v1, v2: v1+v2)
+maxPurchasesPerYearRDD = purchasesPerModelYearDD.map(lambda s: (s[0][1],s[1]).reduceByKey(lambda v1, v2: max(v1,v2))
+
+yearMaxNumPurchases = yearMaxNumPurchasesRDD.collectAsMap()
+
+def countBestPurchasesPerModel(values):
+	year = values[0][1]
+	purchases = values[1]
+	return yearMaxNumPurchases.get(year)==purchases
+
+finalRDD = purchasesPerModelYearDD.filter(lambda l: countBestPurchasesPerModel(l)).map(lambda l: (l[0][0],1))\
+	.reduceByKey(lambda v1, v2: v1+v2).filter(lambda l: l[1]>=2).distinct().keys()
+finalRDD.saveAsTextFile(outputFolder2)
+
